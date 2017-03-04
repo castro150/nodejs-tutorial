@@ -22,6 +22,24 @@ app.config([
           return posts.get($stateParams.id);
         }]
       }
+    }).state('login', {
+      url: '/login',
+      templateUrl: '/login.html',
+      controller: 'AuthCtrl',
+      onEnter: ['$state', 'auth', function($state, auth) {
+        if (auth.isLoggedIn()) {
+          $state.go('home');
+        }
+      }]
+    }).state('register', {
+      url: '/register',
+      templateUrl: '/register.html',
+      controller: 'AuthCtrl',
+      onEnter: ['$state', 'auth', function($state, auth) {
+        if (auth.isLoggedIn()) {
+          $state.go('home');
+        }
+      }]
     });
 
     $urlRouterProvider.otherwise('home');
@@ -31,11 +49,13 @@ app.config([
 app.controller('MainCtrl', [
   '$scope',
   'posts',
-  function($scope, posts) {
+  'auth',
+  function($scope, posts, auth) {
     $scope.test = 'Hellow World!';
     $scope.model = {};
     $scope.posts = posts.posts;
 
+    $scope.isLoggedIn = auth.isLoggedIn;
     $scope.addPost = addPost;
     function addPost() {
       if(!$scope.model.title || $scope.model.title === '') { return; }
@@ -58,10 +78,12 @@ app.controller('PostsCtrl', [
   '$scope',
   'posts',
   'post',
-  function($scope, posts, post) {
+  'auth',
+  function($scope, posts, post, auth) {
     $scope.post = post;
     $scope.model = {};
 
+    $scope.isLoggedIn = auth.isLoggedIn;
     $scope.addComment = addComment;
     function addComment() {
       if(!$scope.model.body || $scope.model.body === '') { return; }
@@ -81,7 +103,42 @@ app.controller('PostsCtrl', [
   }
 ]);
 
-app.factory('posts', ['$http', function($http) {
+app.controller('AuthCtrl', [
+  '$scope',
+  '$state',
+  'auth',
+  function($scope, $state, auth) {
+    $scope.user = {};
+
+    $scope.register = function() {
+      auth.register($scope.user).error(function(error) {
+        $scope.error = error;
+      }).then(function() {
+        $state.go('home');
+      });
+    }
+
+    $scope.logIn = function() {
+      auth.logIn($scope.user).error(function(error) {
+        $scope.error = error;
+      }).then(function() {
+        $state.go('home');
+      });
+    }
+  }
+]);
+
+app.controller('NavCtrl', [
+  '$scope',
+  'auth',
+  function($scope, auth) {
+    $scope.isLoggedIn = auth.isLoggedIn;
+    $scope.currentUser = auth.currentUser;
+    $scope.logOut = auth.logOut;
+  }
+]);
+
+app.factory('posts', ['$http', 'auth', function($http, auth) {
     var o = {
       posts: []
     };
@@ -102,26 +159,34 @@ app.factory('posts', ['$http', function($http) {
 
     o.create = create;
     function create(post) {
-      return $http.post('/posts', post).success(function(data) {
+      return $http.post('/posts', post, {
+        headers: { Authorization: 'Bearer ' + auth.getToken() }
+      }).success(function(data) {
         o.posts.push(data);
       });
     }
 
     o.upvote = upvote;
     function upvote(post) {
-      return $http.put('/posts/' + post._id + '/upvote').success(function(data) {
+      return $http.put('/posts/' + post._id + '/upvote', null, {
+        headers: { Authorization: 'Bearer ' + auth.getToken() }
+      }).success(function(data) {
         post.upvotes += 1;
       });
     }
 
     o.addComment = addComment;
     function addComment(id, comment) {
-      return $http.post('/posts/' + id + '/comments', comment);
+      return $http.post('/posts/' + id + '/comments', comment, {
+        headers: { Authorization: 'Bearer ' + auth.getToken() }
+      });
     }
 
     o.upvoteComment = upvoteComment;
     function upvoteComment(post, comment) {
-      return $http.put('/posts/' + post._id + '/comments/' + comment._id + '/upvote').success(function(data) {
+      return $http.put('/posts/' + post._id + '/comments/' + comment._id + '/upvote', null, {
+        headers: { Authorization: 'Bearer ' + auth.getToken() }
+      }).success(function(data) {
         comment.upvotes = data.upvotes;
       });
     }
